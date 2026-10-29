@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'screens/transaction_history_screen.dart';
@@ -27,6 +29,7 @@ class ExpenseManagerApp extends StatefulWidget {
 }
 
 class _ExpenseManagerAppState extends State<ExpenseManagerApp> {
+  bool _showWelcome = true;
   ThemeMode _themeMode = ThemeMode.dark;
 
   void _toggleTheme() {
@@ -72,172 +75,288 @@ class _ExpenseManagerAppState extends State<ExpenseManagerApp> {
           elevation: 0,
         ),
       ),
-      home: WelcomeScreen(
-        onToggleTheme: _toggleTheme,
-        isDark: _themeMode == ThemeMode.dark,
-      ),
+      home: _showWelcome
+          ? WelcomeFlow(
+              isDark: _themeMode == ThemeMode.dark,
+              onToggleTheme: _toggleTheme,
+              onFinished: () {
+                if (mounted) setState(() => _showWelcome = false);
+              },
+            )
+          : const DashboardScreen(),
     );
   }
 }
 
-class WelcomeScreen extends StatelessWidget {
-  final VoidCallback onToggleTheme;
+class WelcomeFlow extends StatefulWidget {
   final bool isDark;
+  final VoidCallback onToggleTheme;
+  final VoidCallback onFinished;
 
-  const WelcomeScreen({
+  const WelcomeFlow({
     super.key,
-    required this.onToggleTheme,
     required this.isDark,
+    required this.onToggleTheme,
+    required this.onFinished,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+  State<WelcomeFlow> createState() => _WelcomeFlowState();
+}
 
+class _WelcomeFlowState extends State<WelcomeFlow> {
+  final PageController _pageController = PageController();
+  Timer? _autoAdvanceTimer;
+  int _page = 0;
+  static const Duration _pageDuration = Duration(seconds: 7);
+  static const Duration _transitionDuration = Duration(milliseconds: 650);
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleAutoAdvance();
+  }
+
+  void _scheduleAutoAdvance() {
+    _autoAdvanceTimer?.cancel();
+    _autoAdvanceTimer = Timer(_pageDuration, () {
+      if (!mounted) return;
+      _next();
+    });
+  }
+
+  void _skip() {
+    _autoAdvanceTimer?.cancel();
+    widget.onFinished();
+  }
+
+  // New onboarding content based on the four reference screens supplied:
+  // splash screen, Track Expenses, Secure & Private, and Savings Goals.
+  static const _pages = <_WelcomePageData>[
+    _WelcomePageData(
+      title: 'Budget Buddy',
+      subtitle: 'Achieve more together',
+      description:
+          'A smarter way to understand your money and build better habits.',
+      illustration: _WelcomeIllustration.budget,
+    ),
+    _WelcomePageData(
+      title: 'Track Expenses with Ease',
+      subtitle: 'Stay on top of your spending',
+      description: 'Stay on top of your spending with real-time tracking, easy categorization, and instant updates.',
+      illustration: _WelcomeIllustration.tracking,
+    ),
+    _WelcomePageData(
+      title: 'Your Data, Secure and Private',
+      subtitle: 'Your privacy comes first',
+      description: 'Rest assured with bank-level encryption and privacy controls that keep your information safe every step of the way.',
+      illustration: _WelcomeIllustration.security,
+    ),
+    _WelcomePageData(
+      title: 'Achieve Savings Goals as a Team',
+      subtitle: 'Make progress together',
+      description: 'Share goals and track progress with visual milestones. Make it easy to save for trips, emergencies, and more.',
+      illustration: _WelcomeIllustration.savings,
+    ),
+  ];
+
+  @override
+  void dispose() {
+    _autoAdvanceTimer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _next() {
+    _autoAdvanceTimer?.cancel();
+    if (_page == _pages.length - 1) {
+      widget.onFinished();
+      return;
+    }
+    _pageController.nextPage(
+      duration: _transitionDuration,
+      curve: Curves.easeInOutCubic,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
       body: SafeArea(
-        child: Stack(
+        child: Column(
           children: [
-            Positioned(
-              top: -100,
-              right: -90,
-              child: Container(
-                width: 260,
-                height: 260,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.violet.withValues(alpha: 0.10),
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: -100,
-              left: -90,
-              child: Container(
-                width: 260,
-                height: 260,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.teal.withValues(alpha: 0.09),
-                ),
-              ),
-            ),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: IconButton(
-                tooltip: 'Toggle theme',
-                onPressed: onToggleTheme,
-                icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
-              ),
-            ),
-            Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 28,
-                  vertical: 36,
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        color: AppColors.teal.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(30),
-                        border: Border.all(
-                          color: AppColors.teal.withValues(alpha: 0.30),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton(
+                    onPressed: _skip,
+                    child: Text(_page == 0 ? 'Skip intro' : 'Skip'),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: widget.isDark
+                            ? 'Switch to light theme'
+                            : 'Switch to dark theme',
+                        onPressed: widget.onToggleTheme,
+                        icon: Icon(
+                          widget.isDark
+                              ? Icons.light_mode_rounded
+                              : Icons.dark_mode_rounded,
                         ),
                       ),
-                      child: const Icon(
-                        Icons.account_balance_wallet_rounded,
-                        size: 48,
-                        color: AppColors.teal,
-                      ),
-                    ),
-                    const SizedBox(height: 28),
-                    Text(
-                      'Expense Manager',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineMedium
-                          ?.copyWith(fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Smart Spending, Better Living',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: colors.onSurface.withValues(alpha: 0.72),
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                    const SizedBox(height: 38),
-                    const _AnimatedLotus(),
-                    const SizedBox(height: 18),
-                    Text(
-                      '— BRAJ MOHAN —',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: isDark
-                            ? AppColors.pink
-                            : const Color(0xFFAD5279),
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 3,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Text(
-                      'Take control of your money.',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: colors.onSurface.withValues(alpha: 0.65),
-                      ),
-                    ),
-                    const SizedBox(height: 42),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: FilledButton(
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const DashboardScreen(),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: _pages.length,
+                physics: const BouncingScrollPhysics(),
+                onPageChanged: (index) {
+                  setState(() => _page = index);
+                  _scheduleAutoAdvance();
+                },
+                itemBuilder: (context, index) {
+                  final item = _pages[index];
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(28, 8, 28, 12),
+                    child: Column(
+                      children: [
+                        Expanded(
+                          flex: 6,
+                          child: Center(
+                            child: _WelcomeIllustrationView(
+                              kind: item.illustration,
                             ),
-                          );
-                        },
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.teal,
-                          foregroundColor: AppColors.midnight,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(18),
                           ),
                         ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Get Started',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                              ),
+                        Expanded(
+                          flex: 5,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.fromLTRB(22, 26, 22, 20),
+                            decoration: BoxDecoration(
+                              color: widget.isDark
+                                  ? const Color(0xFF064E4A)
+                                  : const Color(0xFFDDF8EE),
+                              borderRadius: BorderRadius.circular(28),
                             ),
-                            SizedBox(width: 10),
-                            Icon(Icons.arrow_forward_rounded),
-                          ],
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  item.title,
+                                  textAlign: TextAlign.center,
+                                  style: theme.textTheme.headlineSmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w800,
+                                        height: 1.15,
+                                        color: widget.isDark
+                                            ? Colors.white
+                                            : const Color(0xFF123B39),
+                                      ),
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  item.subtitle,
+                                  textAlign: TextAlign.center,
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                    color: widget.isDark
+                                        ? AppColors.teal
+                                        : AppColors.lightTeal,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  item.description,
+                                  textAlign: TextAlign.center,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: widget.isDark
+                                        ? Colors.white.withValues(alpha: 0.78)
+                                        : const Color(0xFF315B56),
+                                    height: 1.45,
+                                  ),
+                                ),
+                                const SizedBox(height: 18),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: List.generate(_pages.length, (
+                                    dotIndex,
+                                  ) {
+                                    final selected = dotIndex == _page;
+                                    return AnimatedContainer(
+                                      duration: const Duration(
+                                        milliseconds: 200,
+                                      ),
+                                      margin: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                      ),
+                                      width: selected ? 22 : 7,
+                                      height: 7,
+                                      decoration: BoxDecoration(
+                                        color: selected
+                                            ? (widget.isDark
+                                                  ? AppColors.teal
+                                                  : AppColors.lightTeal)
+                                            : (widget.isDark
+                                                  ? Colors.white38
+                                                  : Colors.black26),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                    );
+                                  }),
+                                ),
+                                const SizedBox(height: 18),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 52,
+                                  child: FilledButton(
+                                    onPressed: _next,
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: const Color(0xFFB8FFD0),
+                                      foregroundColor: const Color(0xFF124A3C),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      _page == _pages.length - 1
+                                          ? 'Get Started'
+                                          : 'Next',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
-                    const SizedBox(height: 20),
-                    Text(
-                      'YOUR MONEY. YOUR CONTROL.',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        letterSpacing: 2,
-                        color: colors.onSurface.withValues(alpha: 0.50),
-                      ),
-                    ),
-                  ],
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Text(
+                '— BRAJ MOHAN —',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  letterSpacing: 2.2,
+                  fontWeight: FontWeight.w700,
+                  color: widget.isDark
+                      ? AppColors.pink
+                      : const Color(0xFFAD5279),
                 ),
               ),
             ),
@@ -248,79 +367,133 @@ class WelcomeScreen extends StatelessWidget {
   }
 }
 
-class _AnimatedLotus extends StatefulWidget {
-  const _AnimatedLotus();
+class _WelcomePageData {
+  final String title;
+  final String subtitle;
+  final String description;
+  final _WelcomeIllustration illustration;
 
-  @override
-  State<_AnimatedLotus> createState() => _AnimatedLotusState();
+  const _WelcomePageData({
+    required this.title,
+    required this.subtitle,
+    required this.description,
+    required this.illustration,
+  });
 }
 
-class _AnimatedLotusState extends State<_AnimatedLotus>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _floatAnimation;
-  late final Animation<double> _tiltAnimation;
-  late final Animation<double> _glowAnimation;
+enum _WelcomeIllustration { budget, security, tracking, savings }
 
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2200),
-    )..repeat(reverse: true);
-
-    _floatAnimation = Tween<double>(
-      begin: 0,
-      end: -10,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-    _tiltAnimation = Tween<double>(
-      begin: -0.045,
-      end: 0.045,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-    _glowAnimation = Tween<double>(
-      begin: 0.10,
-      end: 0.28,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+class _WelcomeIllustrationView extends StatelessWidget {
+  final _WelcomeIllustration kind;
+  const _WelcomeIllustrationView({required this.kind});
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      child: const Text('🪷', style: TextStyle(fontSize: 92)),
-      builder: (context, child) {
-        return Transform.translate(
-          offset: Offset(0, _floatAnimation.value),
-          child: Transform.rotate(
-            angle: _tiltAnimation.value,
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.pink.withValues(
-                      alpha: _glowAnimation.value,
-                    ),
-                    blurRadius: 34,
-                    spreadRadius: 3,
-                  ),
-                ],
-              ),
-              child: child,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final base = isDark ? const Color(0xFF123E3D) : const Color(0xFFC7F1E5);
+    final green = isDark ? const Color(0xFF6AF0A2) : const Color(0xFF15966D);
+    final pale = isDark ? const Color(0xFFB8FFD0) : const Color(0xFF087E69);
+    final icon = switch (kind) {
+      _WelcomeIllustration.budget => Icons.savings_rounded,
+      _WelcomeIllustration.security => Icons.shield_rounded,
+      _WelcomeIllustration.tracking => Icons.analytics_rounded,
+      _WelcomeIllustration.savings => Icons.account_balance_wallet_rounded,
+    };
+    final label = switch (kind) {
+      _WelcomeIllustration.budget => 'BUDGET BUDDY',
+      _WelcomeIllustration.security => 'PRIVATE & SECURE',
+      _WelcomeIllustration.tracking => 'SPENDING INSIGHTS',
+      _WelcomeIllustration.savings => 'SAVINGS GOALS',
+    };
+
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 340, maxHeight: 330),
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: base,
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: green.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 104,
+            height: 104,
+            decoration: BoxDecoration(
+              color: green.withValues(alpha: 0.17),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 60, color: green),
+          ),
+          const SizedBox(height: 20),
+          if (kind == _WelcomeIllustration.tracking)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _Bar(height: 42, color: green),
+                const SizedBox(width: 10),
+                _Bar(height: 72, color: pale),
+                const SizedBox(width: 10),
+                _Bar(height: 54, color: green),
+                const SizedBox(width: 10),
+                _Bar(height: 88, color: pale),
+              ],
+            )
+          else if (kind == _WelcomeIllustration.savings)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.savings_rounded, size: 42, color: green),
+                const SizedBox(width: 14),
+                Icon(Icons.trending_up_rounded, size: 42, color: pale),
+                const SizedBox(width: 14),
+                Icon(Icons.savings_rounded, size: 42, color: green),
+              ],
+            )
+          else
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.currency_rupee_rounded, size: 32, color: pale),
+                const SizedBox(width: 14),
+                Icon(Icons.check_circle_rounded, size: 32, color: green),
+                const SizedBox(width: 14),
+                Icon(Icons.currency_rupee_rounded, size: 32, color: pale),
+              ],
+            ),
+          const SizedBox(height: 22),
+          Text(
+            label,
+            style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF164E45),
+              fontWeight: FontWeight.w800,
+              letterSpacing: 2,
+              fontSize: 12,
             ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
+}
+
+class _Bar extends StatelessWidget {
+  final double height;
+  final Color color;
+  const _Bar({required this.height, required this.color});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 24,
+    height: height,
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(7),
+    ),
+  );
 }
 
 class DashboardScreen extends StatefulWidget {
@@ -734,6 +907,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               transactions: _transactions,
               moneyFormatter: _money,
             ),
+            const SizedBox(height: 20),
+            _CandlestickChartCard(transactions: _transactions),
             const SizedBox(height: 28),
 
             Row(
@@ -845,6 +1020,215 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
+}
+
+class _CandlestickChartCard extends StatelessWidget {
+  final List<TransactionModel> transactions;
+
+  const _CandlestickChartCard({required this.transactions});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final now = DateTime.now();
+    final monthItems =
+        transactions
+            .where(
+              (item) =>
+                  item.date.year == now.year && item.date.month == now.month,
+            )
+            .toList()
+          ..sort((a, b) {
+            final dateCompare = a.date.compareTo(b.date);
+            if (dateCompare != 0) return dateCompare;
+            return (a.id ?? 0).compareTo(b.id ?? 0);
+          });
+
+    final Map<int, List<TransactionModel>> byDay = {};
+    for (final item in monthItems) {
+      byDay.putIfAbsent(item.date.day, () => []).add(item);
+    }
+    final candles = <_CandleData>[];
+    var runningBalance = 0.0;
+    for (final entry in byDay.entries) {
+      final open = runningBalance;
+      var high = open;
+      var low = open;
+      for (final item in entry.value) {
+        final isIncome = item.type.toLowerCase() == 'income';
+        runningBalance += isIncome ? item.amount : -item.amount;
+        if (runningBalance > high) high = runningBalance;
+        if (runningBalance < low) low = runningBalance;
+      }
+      candles.add(
+        _CandleData(
+          day: entry.key,
+          open: open,
+          high: high,
+          low: low,
+          close: runningBalance,
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.violet.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Cash Flow Candlestick Chart',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Daily balance movement • ${DateFormatters.monthYear(now)}',
+            style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
+          ),
+          const SizedBox(height: 18),
+          if (candles.isEmpty)
+            SizedBox(
+              height: 150,
+              child: Center(
+                child: Text(
+                  'Add this month’s transactions to see the candlestick chart.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: colors.onSurfaceVariant),
+                ),
+              ),
+            )
+          else
+            SizedBox(
+              height: 190,
+              width: double.infinity,
+              child: CustomPaint(
+                painter: _CandlestickPainter(
+                  candles: candles,
+                  positiveColor: AppColors.teal,
+                  negativeColor: const Color(0xFFFB7185),
+                  axisColor: colors.onSurface.withValues(alpha: 0.22),
+                  labelColor: colors.onSurfaceVariant,
+                ),
+              ),
+            ),
+          const SizedBox(height: 10),
+          const Row(
+            children: [
+              Icon(Icons.circle, color: AppColors.teal, size: 10),
+              SizedBox(width: 6),
+              Text('Balance increased', style: TextStyle(fontSize: 11)),
+              SizedBox(width: 16),
+              Icon(Icons.circle, color: Color(0xFFFB7185), size: 10),
+              SizedBox(width: 6),
+              Text('Balance decreased', style: TextStyle(fontSize: 11)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CandleData {
+  final int day;
+  final double open, high, low, close;
+  const _CandleData({
+    required this.day,
+    required this.open,
+    required this.high,
+    required this.low,
+    required this.close,
+  });
+}
+
+class _CandlestickPainter extends CustomPainter {
+  final List<_CandleData> candles;
+  final Color positiveColor, negativeColor, axisColor, labelColor;
+  const _CandlestickPainter({
+    required this.candles,
+    required this.positiveColor,
+    required this.negativeColor,
+    required this.axisColor,
+    required this.labelColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (candles.isEmpty || size.width <= 0 || size.height <= 0) return;
+    const left = 8.0, right = 8.0, top = 8.0, bottom = 24.0;
+    final plot = Rect.fromLTRB(
+      left,
+      top,
+      size.width - right,
+      size.height - bottom,
+    );
+    var minValue = candles.map((c) => c.low).reduce((a, b) => a < b ? a : b);
+    var maxValue = candles.map((c) => c.high).reduce((a, b) => a > b ? a : b);
+    if ((maxValue - minValue).abs() < 0.01) {
+      minValue -= 1;
+      maxValue += 1;
+    }
+    final range = maxValue - minValue;
+    double y(double value) =>
+        plot.bottom - ((value - minValue) / range) * plot.height;
+    final gridPaint = Paint()
+      ..color = axisColor
+      ..strokeWidth = 0.7;
+    for (var i = 0; i < 4; i++) {
+      final gy = plot.top + plot.height * i / 3;
+      canvas.drawLine(Offset(plot.left, gy), Offset(plot.right, gy), gridPaint);
+    }
+    final slot = plot.width / candles.length;
+    final bodyWidth = (slot * 0.52).clamp(3.0, 14.0);
+    final textPainter = TextPainter(textDirection: TextDirection.ltr);
+    for (var i = 0; i < candles.length; i++) {
+      final c = candles[i];
+      final x = plot.left + slot * (i + 0.5);
+      final color = c.close >= c.open ? positiveColor : negativeColor;
+      final wick = Paint()
+        ..color = color
+        ..strokeWidth = 1.5;
+      canvas.drawLine(Offset(x, y(c.high)), Offset(x, y(c.low)), wick);
+      final topY = y(c.open < c.close ? c.close : c.open);
+      final bottomY = y(c.open < c.close ? c.open : c.close);
+      final body = Rect.fromLTRB(
+        x - bodyWidth / 2,
+        topY,
+        x + bodyWidth / 2,
+        (bottomY - topY).abs() < 2 ? topY + 2 : bottomY,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(body, const Radius.circular(2)),
+        Paint()..color = color,
+      );
+      if (candles.length <= 12 ||
+          i == 0 ||
+          i == candles.length - 1 ||
+          i % 5 == 0) {
+        textPainter.text = TextSpan(
+          text: '${c.day}',
+          style: TextStyle(color: labelColor, fontSize: 10),
+        );
+        textPainter.layout();
+        textPainter.paint(
+          canvas,
+          Offset(x - textPainter.width / 2, plot.bottom + 6),
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CandlestickPainter oldDelegate) =>
+      oldDelegate.candles != candles ||
+      oldDelegate.positiveColor != positiveColor ||
+      oldDelegate.negativeColor != negativeColor ||
+      oldDelegate.axisColor != axisColor;
 }
 
 class _ExpenseBreakdownCard extends StatelessWidget {

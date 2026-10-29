@@ -164,4 +164,31 @@ class DatabaseService {
 
     return '$year-$month-$day';
   }
+
+  static const String _introCompletedKey = 'intro_completed';
+
+  // Returns true after the first-run introduction has been completed.
+  Future<bool> hasCompletedIntro() async {
+    final db = await database;
+    final rows = await db.query(
+      _settingsTable,
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: [_introCompletedKey],
+      limit: 1,
+    );
+    return rows.isNotEmpty && rows.first['value'] == 'true';
+  }
+
+  // Persist the introduction state in the existing local SQLite settings table.
+  Future<void> setIntroCompleted() async {
+    final db = await database;
+    await db.insert(
+      _settingsTable,
+      {'key': _introCompletedKey, 'value': 'true'},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+
 }
